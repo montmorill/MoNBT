@@ -8,43 +8,70 @@ pub mod mutf8;
 pub mod owned;
 mod tag;
 
-pub struct Edition<const Java: bool, const Variant: bool>;
-pub type JavaEdition<const Network: bool = false> = Edition<true, Network>;
-pub type JavaEditionNetwork = JavaEdition<true>;
+pub trait Edition {
+    const Java: bool;
+    const Variant: bool;
+    const Instance: Self;
+}
 
-pub type BedrockEdition<const VarInt: bool = false> = Edition<false, VarInt>;
-pub type BedrockEditionVarInt = BedrockEdition<true>;
+#[derive(Debug)]
+pub struct JavaEdition;
+impl Edition for JavaEdition {
+    const Java: bool = true;
+    const Variant: bool = false;
+    const Instance: Self = Self;
+}
+
+#[derive(Debug)]
+pub struct JavaEditionNetwork;
+impl Edition for JavaEditionNetwork {
+    const Java: bool = true;
+    const Variant: bool = true;
+    const Instance: Self = Self;
+}
+
+#[derive(Debug)]
+pub struct BedrockEdition;
+impl Edition for BedrockEdition {
+    const Java: bool = true;
+    const Variant: bool = false;
+    const Instance: Self = Self;
+}
+
+#[derive(Debug)]
+pub struct BedrockEditionVarInt;
+impl Edition for BedrockEditionVarInt {
+    const Java: bool = true;
+    const Variant: bool = true;
+    const Instance: Self = Self;
+}
 
 pub trait Deserialize<'a, T> {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<T>;
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, &'a Mutf8Str>
-    for Edition<Java, Variant>
-{
+impl<'a, T: Edition> Deserialize<'a, &'a Mutf8Str> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<&'a Mutf8Str> {
         let len: u16 = self.deserialize(u)?;
         Ok(Mutf8Str::from_slice(u.bytes(len as usize)?))
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, Mutf8String>
-    for Edition<Java, Variant>
-{
+impl<'a, T: Edition> Deserialize<'a, Mutf8String> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<Mutf8String> {
         self.deserialize(u).map(ToOwned::to_owned)
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, i8> for Edition<Java, Variant> {
+impl<'a, T: Edition> Deserialize<'a, i8> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<i8> {
         u.arbitrary()
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, i16> for Edition<Java, Variant> {
+impl<'a, T: Edition> Deserialize<'a, i16> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<i16> {
-        Ok(if Java {
+        Ok(if T::Java {
             i16::from_be_bytes
         } else {
             i16::from_le_bytes
@@ -52,9 +79,9 @@ impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, i16> for Edition
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, i32> for Edition<Java, Variant> {
+impl<'a, T: Edition> Deserialize<'a, i32> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<i32> {
-        Ok(match (Java, Variant) {
+        Ok(match (T::Java, T::Variant) {
             (true, _) => i32::from_be_bytes(u.arbitrary()?),
             (false, false) => i32::from_le_bytes(u.arbitrary()?),
             (false, true) => {
@@ -72,9 +99,9 @@ impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, i32> for Edition
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, i64> for Edition<Java, Variant> {
+impl<'a, T: Edition> Deserialize<'a, i64> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<i64> {
-        Ok(match (Java, Variant) {
+        Ok(match (T::Java, T::Variant) {
             (true, _) => i64::from_be_bytes(u.arbitrary()?),
             (false, false) => i64::from_le_bytes(u.arbitrary()?),
             (false, true) => {
@@ -92,9 +119,9 @@ impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, i64> for Edition
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, f32> for Edition<Java, Variant> {
+impl<'a, T: Edition> Deserialize<'a, f32> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<f32> {
-        Ok(if Java {
+        Ok(if T::Java {
             f32::from_be_bytes
         } else {
             f32::from_le_bytes
@@ -102,9 +129,9 @@ impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, f32> for Edition
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, f64> for Edition<Java, Variant> {
+impl<'a, T: Edition> Deserialize<'a, f64> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<f64> {
-        Ok(if Java {
+        Ok(if T::Java {
             f64::from_be_bytes
         } else {
             f64::from_le_bytes
@@ -112,9 +139,9 @@ impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, f64> for Edition
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, u16> for Edition<Java, Variant> {
+impl<'a, T: Edition> Deserialize<'a, u16> for T {
     fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<u16> {
-        Ok(if Java {
+        Ok(if T::Java {
             u16::from_be_bytes
         } else {
             u16::from_le_bytes

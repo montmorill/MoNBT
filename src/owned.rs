@@ -1,12 +1,13 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
-use arbitrary::{Arbitrary, Error, Result, Unstructured};
+use arbitrary::{Arbitrary, Result, Unstructured};
 
 use crate::mutf8::Mutf8String;
-use crate::{tag::Tag, Deserialize, Edition};
+use crate::Edition;
+use crate::{tag::Tag, Deserialize};
 
 #[derive(Debug, Clone)]
-pub enum OwnedPayload<const Java: bool, const Variant: bool> {
+pub enum OwnedPayload<Edition> {
     Byte(i8),
     Short(i16),
     Int(i32),
@@ -15,14 +16,15 @@ pub enum OwnedPayload<const Java: bool, const Variant: bool> {
     Double(f64),
     ByteArray(Vec<i8>),
     String(Mutf8String),
-    List(OwnedList<Java, Variant>),
-    Compound(OwnedCompound<Java, Variant>),
+    List(OwnedList<Edition>),
+    Compound(OwnedCompound<Edition>),
     IntArray(Vec<i32>),
     LongArray(Vec<i64>),
 }
 
 #[derive(Debug, Clone)]
-pub enum OwnedList<const Java: bool, const Variant: bool> {
+pub enum OwnedList<Edition> {
+    Phantom(PhantomData<Edition>),
     Byte(Vec<i8>),
     Short(Vec<i16>),
     Int(Vec<i32>),
@@ -31,32 +33,20 @@ pub enum OwnedList<const Java: bool, const Variant: bool> {
     Double(Vec<f64>),
     ByteArray(Vec<Vec<i8>>),
     String(Vec<Mutf8String>),
-    List(Vec<OwnedList<Java, Variant>>),
-    Compound(Vec<OwnedCompound<Java, Variant>>),
+    List(Vec<OwnedList<Edition>>),
+    Compound(Vec<OwnedCompound<Edition>>),
     IntArray(Vec<Vec<i32>>),
     LongArray(Vec<Vec<i64>>),
 }
 
-pub type OwnedCompound<const Java: bool, const Variant: bool> =
-    HashMap<Mutf8String, OwnedPayload<Java, Variant>>;
-pub type OwnedNamedTag<const Java: bool, const Variant: bool> =
-    (Mutf8String, OwnedPayload<Java, Variant>);
+pub type OwnedCompound<Edition> = HashMap<Mutf8String, OwnedPayload<Edition>>;
+pub type OwnedNamedTag<Edition> = (Mutf8String, OwnedPayload<Edition>);
 
-impl<'a, T, const Java: bool, const Variant: bool> Deserialize<'a, T> for Tag<Java, Variant>
+impl<'a, T: Edition, U> Deserialize<'a, Vec<U>> for T
 where
-    Edition<Java, Variant>: Deserialize<'a, T>,
+    Self: Deserialize<'a, U>,
 {
-    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<T> {
-        Edition::<Java, Variant>.deserialize(u)
-    }
-}
-
-impl<'a, T, const Java: bool, const Variant: bool> Deserialize<'a, Vec<T>>
-    for Edition<Java, Variant>
-where
-    Self: Deserialize<'a, T>,
-{
-    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<Vec<T>> {
+    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<Vec<U>> {
         let len = <Self as Deserialize<'a, i32>>::deserialize(self, u)?;
         let mut vec = Vec::with_capacity(len as usize);
         for _ in 0..len {
@@ -66,34 +56,30 @@ where
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, OwnedPayload<Java, Variant>>
-    for Tag<Java, Variant>
-{
-    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<OwnedPayload<Java, Variant>> {
+impl<'a, T: Edition> Deserialize<'a, OwnedPayload<T>> for Tag<T> {
+    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<OwnedPayload<T>> {
         Ok(match self {
-            Tag::End => return Err(Error::IncorrectFormat),
-            Tag::Byte => OwnedPayload::Byte(self.deserialize(u)?),
-            Tag::Short => OwnedPayload::Short(self.deserialize(u)?),
-            Tag::Int => OwnedPayload::Int(self.deserialize(u)?),
-            Tag::Long => OwnedPayload::Long(self.deserialize(u)?),
-            Tag::Float => OwnedPayload::Float(self.deserialize(u)?),
-            Tag::Double => OwnedPayload::Double(self.deserialize(u)?),
-            Tag::ByteArray => OwnedPayload::ByteArray(self.deserialize(u)?),
-            Tag::String => OwnedPayload::String(self.deserialize(u)?),
-            Tag::List => OwnedPayload::List(self.deserialize(u)?),
-            Tag::Compound => OwnedPayload::Compound(self.deserialize(u)?),
-            Tag::IntArray => OwnedPayload::IntArray(self.deserialize(u)?),
-            Tag::LongArray => OwnedPayload::LongArray(self.deserialize(u)?),
+            Tag::End(_) => return Err(arbitrary::Error::IncorrectFormat),
+            Tag::Byte => OwnedPayload::Byte(T::Instance.deserialize(u)?),
+            Tag::Short => OwnedPayload::Short(T::Instance.deserialize(u)?),
+            Tag::Int => OwnedPayload::Int(T::Instance.deserialize(u)?),
+            Tag::Long => OwnedPayload::Long(T::Instance.deserialize(u)?),
+            Tag::Float => OwnedPayload::Float(T::Instance.deserialize(u)?),
+            Tag::Double => OwnedPayload::Double(T::Instance.deserialize(u)?),
+            Tag::ByteArray => OwnedPayload::ByteArray(T::Instance.deserialize(u)?),
+            Tag::String => OwnedPayload::String(T::Instance.deserialize(u)?),
+            Tag::List => OwnedPayload::List(T::Instance.deserialize(u)?),
+            Tag::Compound => OwnedPayload::Compound(T::Instance.deserialize(u)?),
+            Tag::IntArray => OwnedPayload::IntArray(T::Instance.deserialize(u)?),
+            Tag::LongArray => OwnedPayload::LongArray(T::Instance.deserialize(u)?),
         })
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, OwnedList<Java, Variant>>
-    for Edition<Java, Variant>
-{
-    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<OwnedList<Java, Variant>> {
-        Ok(match Tag::<Java, Variant>::arbitrary(u)? {
-            Tag::End => return Err(Error::IncorrectFormat),
+impl<'a, T: Edition> Deserialize<'a, OwnedList<T>> for T {
+    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<OwnedList<T>> {
+        Ok(match Tag::<T>::arbitrary(u)? {
+            Tag::End(_) => OwnedList::Phantom(PhantomData),
             Tag::Byte => OwnedList::Byte(self.deserialize(u)?),
             Tag::Short => OwnedList::Short(self.deserialize(u)?),
             Tag::Int => OwnedList::Int(self.deserialize(u)?),
@@ -110,14 +96,12 @@ impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, OwnedList<Java, 
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, OwnedCompound<Java, Variant>>
-    for Edition<Java, Variant>
-{
-    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<OwnedCompound<Java, Variant>> {
+impl<'a, T: Edition> Deserialize<'a, OwnedCompound<T>> for T {
+    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<OwnedCompound<T>> {
         let mut map = HashMap::new();
         loop {
             match Tag::arbitrary(u)? {
-                Tag::End => break Ok(map),
+                Tag::End(_) => break Ok(map),
                 tag => {
                     let name = self.deserialize(u)?;
                     let payload = tag.deserialize(u)?;
@@ -128,10 +112,8 @@ impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, OwnedCompound<Ja
     }
 }
 
-impl<'a, const Java: bool, const Variant: bool> Deserialize<'a, OwnedNamedTag<Java, Variant>>
-    for Edition<Java, Variant>
-{
-    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<OwnedNamedTag<Java, Variant>> {
+impl<'a, T: Edition> Deserialize<'a, OwnedNamedTag<T>> for T {
+    fn deserialize(&self, u: &mut Unstructured<'a>) -> Result<OwnedNamedTag<T>> {
         let tag = Tag::arbitrary(u)?;
         let name = self.deserialize(u)?;
         let payload = tag.deserialize(u)?;

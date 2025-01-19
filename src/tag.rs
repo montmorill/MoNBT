@@ -1,9 +1,13 @@
+use std::marker::PhantomData;
+
 use arbitrary::{Arbitrary, Error, Result, Unstructured};
+
+use crate::Edition;
 
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub enum Tag<const Java: bool, const Variant: bool> {
-    End,
+pub enum Tag<T: Edition> {
+    End(PhantomData<T>),
     Byte,
     Short,
     Int,
@@ -18,10 +22,10 @@ pub enum Tag<const Java: bool, const Variant: bool> {
     LongArray,
 }
 
-impl<'a, const Java: bool, const Variant: bool> Arbitrary<'a> for Tag<Java, Variant> {
+impl<'a, T: Edition> Arbitrary<'a> for Tag<T> {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         Ok(match u8::arbitrary(u)? {
-            0 => Tag::End,
+            0 => Tag::End(PhantomData),
             1 => Tag::Byte,
             2 => Tag::Short,
             3 => Tag::Int,
