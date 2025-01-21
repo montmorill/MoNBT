@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-arbitrary =  "1"
+arbitrary = "1"
 simd_cesu8 = "1"
